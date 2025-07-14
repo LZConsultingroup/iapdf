@@ -493,48 +493,22 @@ class TrazabilityApp {
      * @param {Object} result - Resultado de la comparación
      */
     async sendComparisonAlerts(result) {
-        const users = this.database.getUsers();
-        
-        if (users.length === 0) {
-            console.warn('No hay usuarios registrados para enviar alertas');
-            return;
+        // Sistema de alertas simplificado - solo mostrar en pantalla
+        if (result.summary.similarityScore < 100) {
+            this.notifications.showToast(
+                'Diferencias Detectadas', 
+                `Se encontraron ${result.differences.length} diferencia(s) entre los documentos`, 
+                'warning',
+                8000
+            );
+        } else {
+            this.notifications.showToast(
+                'Documentos Idénticos', 
+                'Los documentos son completamente iguales', 
+                'success',
+                5000
+            );
         }
-
-        const alertMessage = `🚨 ALERTA DE DIFERENCIAS DETECTADAS\n\n` +
-            `Archivos comparados:\n` +
-            `• ${result.files.form1}\n` +
-            `• ${result.files.form2}\n\n` +
-            `Similitud: ${result.summary.similarityScore}%\n` +
-            `Diferencias encontradas: ${result.differences.length}\n\n` +
-            `Se requiere revisión manual.`;
-
-        // Enviar a chat interno
-        this.addSystemMessage(alertMessage, 'alert');
-
-        // Simular envío de notificaciones
-        for (const user of users) {
-            try {
-                // Simular WhatsApp
-                console.log(`📱 WhatsApp enviado a ${user.whatsapp}: ${alertMessage}`);
-                
-                // Simular Email
-                console.log(`📧 Email enviado a ${user.email}: ${alertMessage}`);
-                
-                await new Promise(resolve => setTimeout(resolve, 100)); // Simular delay
-            } catch (error) {
-                console.error(`Error enviando alerta a ${user.name}:`, error);
-            }
-        }
-
-        // Mostrar notificación de alertas enviadas
-        this.notifications.showToast(
-            'Alertas Enviadas', 
-            `Se enviaron alertas a ${users.length} usuario(s) por las diferencias encontradas`, 
-            'warning'
-        );
-
-        // Actualizar badge de alertas
-        this.updateAlertBadge();
     }
 
     /**
@@ -796,32 +770,8 @@ class TrazabilityApp {
      * Configura la gestión de usuarios
      */
     setupUserManagement() {
-        const addUserBtn = document.getElementById('addUserBtn');
-        const userForm = document.getElementById('userForm');
-        const userFormElement = document.getElementById('userFormElement');
-        const cancelUserBtn = document.getElementById('cancelUserBtn');
-
-        if (addUserBtn) {
-            addUserBtn.addEventListener('click', () => {
-                this.showUserForm();
-            });
-        }
-
-        if (cancelUserBtn) {
-            cancelUserBtn.addEventListener('click', () => {
-                this.hideUserForm();
-            });
-        }
-
-        if (userFormElement) {
-            userFormElement.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.saveUser();
-            });
-        }
-
-        // Cargar usuarios existentes
-        this.loadUsers();
+        // Sistema de usuarios simplificado - solo para mostrar estadísticas
+        console.log('Sistema de usuarios simplificado');
     }
 
     /**
@@ -984,29 +934,8 @@ class TrazabilityApp {
      * Configura el sistema de chat
      */
     setupChatSystem() {
-        const messageInput = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendMessageBtn');
-
-        if (messageInput) {
-            messageInput.addEventListener('input', (e) => {
-                const hasText = e.target.value.trim().length > 0;
-                if (sendBtn) sendBtn.disabled = !hasText;
-            });
-
-            messageInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    this.sendMessage();
-                }
-            });
-        }
-
-        if (sendBtn) {
-            sendBtn.addEventListener('click', () => this.sendMessage());
-        }
-
-        // Cargar mensajes existentes
-        this.loadChatMessages();
+        // Sistema de chat removido según solicitud del usuario
+        console.log('Sistema de chat deshabilitado');
     }
 
     /**

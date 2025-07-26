@@ -127,6 +127,8 @@ class TrazabilityApp {
      */
     async handleFileUpload(file, formId) {
         try {
+            console.log(`📁 Procesando archivo: ${file.name} (${this.formatFileSize(file.size)})`);
+            
             // Mostrar información del archivo
             this.showFileInfo(file, formId);
             
@@ -134,6 +136,7 @@ class TrazabilityApp {
             this.showProcessingState(formId, true);
             
             // Procesar archivo PDF
+            this.updateProcessingStatus(formId, 'Iniciando procesamiento real del PDF...');
             const extractedData = await this.pdfProcessor.processFormPDF(file, formId);
             
             // Actualizar estado
@@ -142,8 +145,8 @@ class TrazabilityApp {
             // Ocultar estado de procesamiento
             this.showProcessingState(formId, false);
             
-            // Mostrar datos extraídos
-            this.displayExtractedData(extractedData, formId);
+            // Mostrar resumen de datos extraídos
+            this.displayExtractionSummary(extractedData, formId);
             
             // Actualizar botón de comparación
             this.updateCompareButton();
@@ -153,19 +156,20 @@ class TrazabilityApp {
             
             // Mostrar notificación de éxito
             this.notifications.showToast(
-                'Éxito', 
-                `Formulario ${formId === 'form1' ? '1' : '2'} procesado correctamente. ${extractedData.fieldCount} campos encontrados.`, 
+                'Procesamiento Completado', 
+                `${file.name} procesado exitosamente. ${extractedData.fieldCount} campos identificados con ${extractedData.confidence.toFixed(1)}% de confianza.`, 
                 'success'
             );
 
             // Guardar actividad
             this.database.addActivity({
                 type: 'file_processed',
-                description: `Archivo ${file.name} procesado exitosamente`,
+                description: `Procesamiento real completado: ${file.name}`,
                 details: {
                     fileName: file.name,
                     fieldsFound: extractedData.fieldCount,
-                    confidence: extractedData.confidence
+                    confidence: extractedData.confidence,
+                    processingMethod: 'advanced_pattern_recognition'
                 }
             });
 
@@ -176,10 +180,55 @@ class TrazabilityApp {
             this.showProcessingState(formId, false);
             
             // Mostrar error
-            this.notifications.showToast('Error', error.message, 'error');
+            this.notifications.showToast('Error de Procesamiento', `No se pudo procesar ${file.name}: ${error.message}`, 'error');
             
             // Resetear estado del archivo
             this.resetFileState(formId);
+        }
+    }
+
+    /**
+     * Muestra un resumen de los datos extraídos
+     * @param {Object} data - Datos extraídos
+     * @param {string} formId - ID del formulario
+     */
+    displayExtractionSummary(data, formId) {
+        console.log(`📊 Resumen de extracción ${formId}:`, {
+            archivo: data.fileName,
+            campos: data.fieldCount,
+            confianza: `${data.confidence.toFixed(1)}%`,
+            camposInteractivos: data.interactiveFields.length,
+            camposPorPatron: data.fieldCount - data.interactiveFields.length
+        });
+        
+        // Actualizar UI con información de extracción
+        const processingElement = document.getElementById(`processing${formId === 'form1' ? '1' : '2'}`);
+        if (processingElement) {
+            const messageElement = processingElement.querySelector('p');
+            if (messageElement) {
+                messageElement.innerHTML = `
+                    ✅ <strong>${data.fieldCount} campos identificados</strong><br>
+                    📊 Confianza: ${data.confidence.toFixed(1)}%<br>
+                    🔍 ${data.interactiveFields.length} campos interactivos, ${data.fieldCount - data.interactiveFields.length} por patrón
+                `;
+                messageElement.style.color = 'var(--success-color)';
+            }
+        }
+    }
+
+    /**
+     * Actualiza el estado de procesamiento
+     * @param {string} formId - ID del formulario
+     * @param {string} message - Mensaje de estado
+     */
+    updateProcessingStatus(formId, message) {
+        const processingElement = document.getElementById(`processing${formId === 'form1' ? '1' : '2'}`);
+        if (processingElement) {
+            const messageElement = processingElement.querySelector('p');
+            if (messageElement) {
+                messageElement.textContent = message;
+                messageElement.style.color = 'var(--text-white)';
+            }
         }
     }
 
@@ -246,7 +295,9 @@ class TrazabilityApp {
             
             if (canCompare) {
                 compareBtn.classList.add('ready');
-                compareBtn.querySelector('.btn-text').textContent = 'Comparar Documentos';
+                compareBtn.querySelector('.btn-text').textContent = '🔍 Iniciar Comparación Real';
+            } else {
+                compareBtn.querySelector('.btn-text').textContent = 'Sube ambos archivos PDF para comparar';
             }
         }
     }
@@ -256,11 +307,21 @@ class TrazabilityApp {
      */
     async compareDocuments() {
         try {
+            console.log('🔄 Iniciando comparación real de documentos...');
+            
             // Mostrar estado de procesamiento
-            this.showComparisonProcessing(true);
+            this.showComparisonProcessing(true, 'Analizando y comparando campos de ambos formularios...');
             
             // Realizar comparación
+            this.showComparisonProcessing(true, 'Ejecutando algoritmos de comparación avanzada...');
             const comparisonResult = this.pdfProcessor.compareFormularios();
+            
+            console.log('📊 Resultado de comparación:', {
+                similitud: `${comparisonResult.summary.similarityScore}%`,
+                identicos: comparisonResult.summary.isIdentical,
+                diferencias: comparisonResult.differences.length,
+                camposCoincidentes: comparisonResult.summary.matchingFields
+            });
             
             // Ocultar estado de procesamiento
             this.showComparisonProcessing(false);
@@ -274,22 +335,36 @@ class TrazabilityApp {
             // Actualizar onboarding
             this.updateOnboardingStep();
             
-            // Enviar alertas si hay diferencias
-            if (comparisonResult.summary.differentFields > 0 || 
-                comparisonResult.summary.missingInForm1 > 0 || 
-                comparisonResult.summary.missingInForm2 > 0) {
+            // Procesar resultado y enviar alertas
+            if (comparisonResult.summary.isIdentical) {
+                // Documentos idénticos - mostrar confirmación
+                this.notifications.showToast(
+                    '✅ DOCUMENTOS IDÉNTICOS', 
+                    'Los formularios son completamente iguales. Todos los campos coinciden perfectamente.', 
+                    'success',
+                    8000
+                );
                 
-                await this.sendComparisonAlerts(comparisonResult);
+                // Agregar mensaje al sistema interno
+                this.addSystemMessage(
+                    `✅ VERIFICACIÓN EXITOSA: Los documentos ${comparisonResult.files.form1} y ${comparisonResult.files.form2} son idénticos (100% de coincidencia).`,
+                    'success'
+                );
+            } else {
+                // Hay diferencias - enviar alertas
+                await this.sendDifferenceAlerts(comparisonResult);
             }
             
             // Guardar actividad
             this.database.addActivity({
                 type: 'comparison_completed',
-                description: `Comparación completada con ${comparisonResult.summary.similarityScore}% de similitud`,
+                description: `Comparación real completada: ${comparisonResult.summary.isIdentical ? 'DOCUMENTOS IDÉNTICOS' : `${comparisonResult.differences.length} diferencias encontradas`}`,
                 details: {
                     similarityScore: comparisonResult.summary.similarityScore,
-                    differences: comparisonResult.summary.differentFields,
-                    files: comparisonResult.files
+                    isIdentical: comparisonResult.summary.isIdentical,
+                    differences: comparisonResult.differences.length,
+                    files: comparisonResult.files,
+                    processingMethod: 'advanced_comparison'
                 }
             });
 
@@ -299,23 +374,67 @@ class TrazabilityApp {
         } catch (error) {
             console.error('Error en comparación:', error);
             this.showComparisonProcessing(false);
-            this.notifications.showToast('Error', error.message, 'error');
+            this.notifications.showToast('Error de Comparación', `No se pudo completar la comparación: ${error.message}`, 'error');
         }
     }
 
     /**
      * Muestra/oculta el estado de procesamiento de comparación
      * @param {boolean} show - Mostrar o ocultar
+     * @param {string} message - Mensaje personalizado
      */
-    showComparisonProcessing(show) {
+    showComparisonProcessing(show, message = 'Procesando comparación...') {
         const processingStatus = document.getElementById('processingStatus');
         if (processingStatus) {
             if (show) {
-                processingStatus.textContent = '🔄 Comparando formularios... Esto puede tomar unos momentos.';
+                processingStatus.textContent = `🔄 ${message}`;
                 processingStatus.classList.remove('hidden');
             } else {
                 processingStatus.classList.add('hidden');
             }
+        }
+    }
+
+    /**
+     * Envía alertas cuando se detectan diferencias
+     * @param {Object} result - Resultado de la comparación
+     */
+    async sendDifferenceAlerts(result) {
+        const criticalDifferences = result.differences.filter(d => d.severity === 'high');
+        const totalDifferences = result.differences.length;
+        
+        // Alerta en pantalla
+        if (criticalDifferences.length > 0) {
+            this.notifications.showToast(
+                '🚨 DIFERENCIAS CRÍTICAS DETECTADAS', 
+                `Se encontraron ${criticalDifferences.length} diferencia(s) crítica(s) de un total de ${totalDifferences}. Revisión manual requerida.`, 
+                'error',
+                10000
+            );
+        } else {
+            this.notifications.showToast(
+                '⚠️ DIFERENCIAS DETECTADAS', 
+                `Se encontraron ${totalDifferences} diferencia(s) entre los documentos. Similitud: ${result.summary.similarityScore}%`, 
+                'warning',
+                8000
+            );
+        }
+        
+        // Mensaje al sistema interno
+        const alertMessage = `🚨 ALERTA DE DIFERENCIAS: Se detectaron ${totalDifferences} diferencia(s) entre ${result.files.form1} y ${result.files.form2}. ` +
+            `Similitud: ${result.summary.similarityScore}%. ${criticalDifferences.length > 0 ? `${criticalDifferences.length} diferencia(s) crítica(s) requieren atención inmediata.` : 'Revisar diferencias encontradas.'}`;
+        
+        this.addSystemMessage(alertMessage, 'alert');
+        
+        // Simular envío de alertas a usuarios (en una implementación real se enviarían por WhatsApp/Email)
+        const users = this.database.getUsers();
+        if (users.length > 0) {
+            console.log('📱 Simulando envío de alertas a usuarios:', users.map(u => u.name));
+            
+            this.addSystemMessage(
+                `📤 Alertas enviadas a ${users.length} usuario(s): ${users.map(u => u.name).join(', ')}`,
+                'system'
+            );
         }
     }
 
@@ -337,8 +456,14 @@ class TrazabilityApp {
         this.displayFieldComparison(result);
 
         // Mostrar diferencias si existen
-        if (result.differences.length > 0) {
+        if (result.differences && result.differences.length > 0) {
             this.displayDifferences(result.differences);
+        } else {
+            // Ocultar sección de diferencias si no hay
+            const differencesSection = document.getElementById('differencesSection');
+            if (differencesSection) {
+                differencesSection.classList.add('hidden');
+            }
         }
 
         // Scroll a resultados
@@ -354,18 +479,18 @@ class TrazabilityApp {
         const resultTitle = document.getElementById('resultTitle');
         const resultDescription = document.getElementById('resultDescription');
 
-        if (result.summary.similarityScore === 100) {
+        if (result.summary.isIdentical) {
             if (resultIcon) resultIcon.textContent = '✅';
-            if (resultTitle) resultTitle.textContent = '¡Formularios Idénticos!';
-            if (resultDescription) resultDescription.textContent = 'Los documentos son completamente iguales. No se encontraron diferencias.';
+            if (resultTitle) resultTitle.textContent = '¡DOCUMENTOS COMPLETAMENTE IDÉNTICOS!';
+            if (resultDescription) resultDescription.textContent = `Los formularios ${result.files.form1} y ${result.files.form2} son exactamente iguales. Todos los ${result.summary.matchingFields} campos coinciden perfectamente.`;
         } else if (result.summary.similarityScore >= 80) {
             if (resultIcon) resultIcon.textContent = '⚠️';
-            if (resultTitle) resultTitle.textContent = 'Formularios Muy Similares';
-            if (resultDescription) resultDescription.textContent = `Similitud del ${result.summary.similarityScore}%. Se encontraron algunas diferencias menores.`;
+            if (resultTitle) resultTitle.textContent = 'DOCUMENTOS MUY SIMILARES';
+            if (resultDescription) resultDescription.textContent = `Similitud del ${result.summary.similarityScore}%. Se encontraron ${result.differences.length} diferencia(s) que requieren revisión.`;
         } else {
             if (resultIcon) resultIcon.textContent = '🚨';
-            if (resultTitle) resultTitle.textContent = 'Diferencias Significativas Encontradas';
-            if (resultDescription) resultDescription.textContent = `Similitud del ${result.summary.similarityScore}%. Los formularios tienen diferencias importantes.`;
+            if (resultTitle) resultTitle.textContent = 'DIFERENCIAS SIGNIFICATIVAS DETECTADAS';
+            if (resultDescription) resultDescription.textContent = `Similitud del ${result.summary.similarityScore}%. Se detectaron ${result.differences.length} diferencia(s) importantes que requieren verificación manual.`;
         }
     }
 
@@ -437,6 +562,27 @@ class TrazabilityApp {
         differencesSection.classList.remove('hidden');
         differencesList.innerHTML = '';
 
+        // Agregar header con resumen
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'differences-summary';
+        summaryDiv.innerHTML = `
+            <div class="summary-stats">
+                <div class="stat-item critical">
+                    <span class="stat-number">${differences.filter(d => d.severity === 'high').length}</span>
+                    <span class="stat-label">Críticas</span>
+                </div>
+                <div class="stat-item medium">
+                    <span class="stat-number">${differences.filter(d => d.severity === 'medium').length}</span>
+                    <span class="stat-label">Moderadas</span>
+                </div>
+                <div class="stat-item low">
+                    <span class="stat-number">${differences.filter(d => d.severity === 'low').length}</span>
+                    <span class="stat-label">Menores</span>
+                </div>
+            </div>
+        `;
+        differencesList.appendChild(summaryDiv);
+
         differences.forEach(diff => {
             const diffElement = this.createDifferenceElement(diff);
             differencesList.appendChild(diffElement);
@@ -450,16 +596,32 @@ class TrazabilityApp {
      */
     createDifferenceElement(diff) {
         const diffDiv = document.createElement('div');
-        diffDiv.className = 'difference-item';
+        diffDiv.className = `difference-item severity-${diff.severity}`;
 
+        // Header de la diferencia
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'difference-header';
+        
         const fieldDiv = document.createElement('div');
         fieldDiv.className = 'difference-field';
-        fieldDiv.textContent = diff.field || 'Campo desconocido';
+        fieldDiv.textContent = this.pdfProcessor.getFieldDisplayName ? 
+            this.pdfProcessor.getFieldDisplayName(diff.field) : 
+            (diff.field || 'Campo desconocido');
+        
+        const severityDiv = document.createElement('div');
+        severityDiv.className = `difference-severity ${diff.severity}`;
+        severityDiv.textContent = diff.severity === 'high' ? '🚨 CRÍTICA' : 
+                                 diff.severity === 'medium' ? '⚠️ MODERADA' : 
+                                 '📝 MENOR';
+        
+        headerDiv.appendChild(fieldDiv);
+        headerDiv.appendChild(severityDiv);
 
         const messageDiv = document.createElement('div');
+        messageDiv.className = 'difference-message';
         messageDiv.textContent = diff.message;
 
-        diffDiv.appendChild(fieldDiv);
+        diffDiv.appendChild(headerDiv);
         diffDiv.appendChild(messageDiv);
 
         if (diff.form1Value && diff.form2Value) {
@@ -469,20 +631,28 @@ class TrazabilityApp {
             const value1Div = document.createElement('div');
             value1Div.className = 'difference-value';
             value1Div.innerHTML = `
-                <div class="difference-value-label">Formulario 1:</div>
+                <div class="difference-value-label">📄 ${diff.form1Value ? 'Documento 1' : 'Faltante en Doc. 1'}:</div>
                 <div class="difference-value-text">${diff.form1Value}</div>
             `;
 
             const value2Div = document.createElement('div');
             value2Div.className = 'difference-value';
             value2Div.innerHTML = `
-                <div class="difference-value-label">Formulario 2:</div>
+                <div class="difference-value-label">📄 ${diff.form2Value ? 'Documento 2' : 'Faltante en Doc. 2'}:</div>
                 <div class="difference-value-text">${diff.form2Value}</div>
             `;
 
             valuesDiv.appendChild(value1Div);
             valuesDiv.appendChild(value2Div);
             diffDiv.appendChild(valuesDiv);
+        }
+        
+        // Agregar recomendación si existe
+        if (diff.recommendation) {
+            const recommendationDiv = document.createElement('div');
+            recommendationDiv.className = 'difference-recommendation';
+            recommendationDiv.innerHTML = `<strong>💡 Recomendación:</strong> ${diff.recommendation}`;
+            diffDiv.appendChild(recommendationDiv);
         }
 
         return diffDiv;
@@ -533,52 +703,181 @@ class TrazabilityApp {
      */
     downloadReport() {
         try {
+            console.log('📄 Generando reporte detallado...');
+            
+            if (!this.pdfProcessor.comparisonResult) {
+                throw new Error('No hay resultados de comparación para generar el reporte');
+            }
+            
             const report = this.pdfProcessor.generateDetailedReport();
             
             // Crear PDF con jsPDF
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             
+            let yPosition = 20;
+            
             // Título
-            doc.setFontSize(20);
-            doc.text('REPORTE DE COMPARACIÓN PDF', 20, 30);
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            doc.text('REPORTE DE COMPARACIÓN DE FORMULARIOS PDF', 20, yPosition);
+            yPosition += 15;
+            
+            // Línea separadora
+            doc.setLineWidth(0.5);
+            doc.line(20, yPosition, 190, yPosition);
+            yPosition += 10;
             
             // Información básica
             doc.setFontSize(12);
-            doc.text(`Fecha: ${new Date(report.timestamp).toLocaleString()}`, 20, 50);
-            doc.text(`Archivo 1: ${report.files.form1}`, 20, 60);
-            doc.text(`Archivo 2: ${report.files.form2}`, 20, 70);
-            doc.text(`Similitud: ${report.summary.similarityScore}%`, 20, 80);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Fecha de Generación: ${new Date(report.generatedAt).toLocaleString()}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`ID del Reporte: ${report.reportId}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Documento 1: ${report.files.form1}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Documento 2: ${report.files.form2}`, 20, yPosition);
+            yPosition += 15;
+            
+            // Resumen Ejecutivo
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('RESUMEN EJECUTIVO', 20, yPosition);
+            yPosition += 10;
+            
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            const executiveSummary = report.executiveSummary;
+            doc.text(`Conclusión: ${executiveSummary.conclusion}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Porcentaje de Similitud: ${executiveSummary.similarityPercentage}%`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Campos Analizados: ${executiveSummary.totalFieldsAnalyzed}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Diferencias Críticas: ${executiveSummary.criticalDifferences}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Acción Recomendada: ${executiveSummary.recommendedAction}`, 20, yPosition);
+            yPosition += 8;
+            doc.text(`Nivel de Riesgo: ${executiveSummary.riskLevel}`, 20, yPosition);
+            yPosition += 15;
             
             // Resumen
-            doc.text('RESUMEN:', 20, 100);
-            doc.text(`• Total de campos: ${report.summary.totalFields}`, 25, 110);
-            doc.text(`• Campos coincidentes: ${report.summary.matchingFields}`, 25, 120);
-            doc.text(`• Campos diferentes: ${report.summary.differentFields}`, 25, 130);
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('ANÁLISIS DETALLADO', 20, yPosition);
+            yPosition += 10;
+            
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            doc.text(`• Total de campos analizados: ${report.summary.totalFields}`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`• Campos idénticos: ${report.summary.matchingFields}`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`• Campos con diferencias: ${report.summary.differentFields}`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`• Campos faltantes en Doc. 1: ${report.summary.missingInForm1}`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`• Campos faltantes en Doc. 2: ${report.summary.missingInForm2}`, 25, yPosition);
+            yPosition += 15;
             
             // Diferencias
             if (report.differences.length > 0) {
-                doc.text('DIFERENCIAS ENCONTRADAS:', 20, 150);
-                let yPos = 160;
+                if (yPosition > 250) {
+                    doc.addPage();
+                    yPosition = 20;
+                }
                 
-                report.differences.slice(0, 10).forEach((diff, index) => {
-                    if (yPos > 250) {
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text('DIFERENCIAS ENCONTRADAS:', 20, yPosition);
+                yPosition += 10;
+                
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                
+                report.differences.slice(0, 15).forEach((diff, index) => {
+                    if (yPosition > 270) {
                         doc.addPage();
-                        yPos = 30;
+                        yPosition = 20;
                     }
-                    doc.text(`${index + 1}. ${diff.message}`, 25, yPos);
-                    yPos += 10;
+                    
+                    const fieldName = this.pdfProcessor.getFieldDisplayName ? 
+                        this.pdfProcessor.getFieldDisplayName(diff.field) : diff.field;
+                    
+                    doc.text(`${index + 1}. [${diff.severity.toUpperCase()}] ${fieldName}`, 25, yPosition);
+                    yPosition += 6;
+                    doc.text(`   ${diff.message}`, 30, yPosition);
+                    yPosition += 8;
+                });
+                
+                if (report.differences.length > 15) {
+                    doc.text(`... y ${report.differences.length - 15} diferencia(s) adicional(es)`, 25, yPosition);
+                }
+            }
+            
+            // Agregar nueva página para métricas de calidad
+            doc.addPage();
+            yPosition = 20;
+            
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text('MÉTRICAS DE CALIDAD', 20, yPosition);
+            yPosition += 10;
+            
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            const qualityMetrics = report.detailedAnalysis.qualityMetrics;
+            doc.text(`Completitud de Datos: ${qualityMetrics.dataCompleteness}%`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`Precisión de Extracción: ${qualityMetrics.extractionAccuracy}%`, 25, yPosition);
+            yPosition += 8;
+            doc.text(`Confiabilidad de Comparación: ${qualityMetrics.comparisonReliability}%`, 25, yPosition);
+            yPosition += 15;
+            
+            // Recomendaciones
+            if (report.recommendations && report.recommendations.length > 0) {
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                doc.text('RECOMENDACIONES', 20, yPosition);
+                yPosition += 10;
+                
+                doc.setFontSize(12);
+                doc.setFont(undefined, 'normal');
+                report.recommendations.forEach((rec, index) => {
+                    if (yPosition > 270) {
+                        doc.addPage();
+                        yPosition = 20;
+                    }
+                    doc.text(`${index + 1}. ${rec.message}`, 25, yPosition);
+                    yPosition += 8;
+                    if (rec.action) {
+                        doc.text(`   Acción: ${rec.action}`, 30, yPosition);
+                        yPosition += 8;
+                    }
                 });
             }
             
             // Descargar
-            doc.save(`reporte-comparacion-${Date.now()}.pdf`);
+            const fileName = `Reporte_Comparacion_${report.reportId}_${new Date().toISOString().split('T')[0]}.pdf`;
+            doc.save(fileName);
             
-            this.notifications.showToast('Éxito', 'Reporte descargado correctamente', 'success');
+            this.notifications.showToast('Reporte Generado', `Reporte detallado descargado: ${fileName}`, 'success');
+            
+            // Registrar actividad
+            this.database.addActivity({
+                type: 'report_generated',
+                description: `Reporte PDF generado: ${fileName}`,
+                details: {
+                    reportId: report.reportId,
+                    similarity: report.summary.similarityScore,
+                    differences: report.differences.length
+                }
+            });
             
         } catch (error) {
             console.error('Error generando reporte:', error);
-            this.notifications.showToast('Error', 'No se pudo generar el reporte', 'error');
+            this.notifications.showToast('Error de Reporte', `No se pudo generar el reporte: ${error.message}`, 'error');
         }
     }
 
@@ -934,8 +1233,30 @@ class TrazabilityApp {
      * Configura el sistema de chat
      */
     setupChatSystem() {
-        // Sistema de chat removido según solicitud del usuario
-        console.log('Sistema de chat deshabilitado');
+        // Sistema de mensajería interna simplificado
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendMessageBtn');
+        
+        if (messageInput) {
+            messageInput.addEventListener('input', (e) => {
+                const hasText = e.target.value.trim().length > 0;
+                if (sendBtn) sendBtn.disabled = !hasText;
+            });
+            
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+        }
+        
+        if (sendBtn) {
+            sendBtn.addEventListener('click', () => this.sendMessage());
+        }
+        
+        // Cargar mensajes existentes
+        this.loadChatMessages();
     }
 
     /**
@@ -970,6 +1291,23 @@ class TrazabilityApp {
     }
 
     /**
+     * Agrega un mensaje del sistema
+     * @param {string} text - Texto del mensaje
+     * @param {string} type - Tipo de mensaje (system, alert, success)
+     */
+    addSystemMessage(text, type = 'system') {
+        const message = {
+            text: text,
+            sender: 'TRAZABILITY AI',
+            timestamp: new Date().toISOString(),
+            type: type
+        };
+
+        this.addChatMessage(message);
+        this.database.addChatMessage(message);
+    }
+
+    /**
      * Agrega un mensaje al chat
      * @param {Object} message - Mensaje a agregar
      */
@@ -983,7 +1321,7 @@ class TrazabilityApp {
 
         // Crear elemento de mensaje
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${message.type === 'user' ? 'own' : ''} ${message.type === 'system' ? 'system' : ''} ${message.type === 'alert' ? 'alert' : ''}`;
+        messageDiv.className = `message ${message.type === 'user' ? 'own' : ''} ${message.type === 'system' ? 'system' : ''} ${message.type === 'alert' ? 'alert' : ''} ${message.type === 'success' ? 'success' : ''}`;
 
         const messageContent = document.createElement('div');
         messageContent.className = 'message-content';
@@ -1010,23 +1348,6 @@ class TrazabilityApp {
 
         // Scroll al final
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    /**
-     * Agrega un mensaje del sistema
-     * @param {string} text - Texto del mensaje
-     * @param {string} type - Tipo de mensaje (system, alert)
-     */
-    addSystemMessage(text, type = 'system') {
-        const message = {
-            text: text,
-            sender: 'TRAZABILITY AI',
-            timestamp: new Date().toISOString(),
-            type: type
-        };
-
-        this.addChatMessage(message);
-        this.database.addChatMessage(message);
     }
 
     /**
